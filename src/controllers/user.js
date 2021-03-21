@@ -1,10 +1,18 @@
 const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcrypt");
 
 const prisma = new PrismaClient();
 
 async function getAll(req, res) {
-  const allUsers = await prisma.user.findMany();
-  res.send(JSON.stringify({ status: 200, error: null, response: allUsers }));
+  const allUsers = await prisma.user.findMany({
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+    },
+  });
+  res.status(200).json({ users: allUsers });
 }
 
 async function getOne(req, res) {
@@ -12,57 +20,40 @@ async function getOne(req, res) {
     const { id } = req.params;
     const user = await prisma.user.findUnique({
       where: {
-        id: parseInt(id),
+        id: Number(id),
+      },
+      select: {
+        password: false,
       },
     });
-    res.send(JSON.stringify({ status: 200, error: null, response: user }));
-
+    res.status(200).json({ user });
   } catch (e) {
-    res.send(JSON.stringify({ status: 500, error: e, response: null }));
-
+    res.status(404).json({ error: "Not Found" });
   }
 }
 
 async function create(req, res) {
   try {
-
-    const user = await prisma.users({
+    const user = await prisma.user.findUnique({
       where: { email: req.body.email },
     });
-    if (user.length != 0) {
-      res.send(
-        JSON.stringify({ status: 302, error: "User is found with that email" })
-      );
+    if (user) {
+      res.status(302).json({ error: "Email have already been used" });
       return;
     }
     req.body.password = await bcrypt.hash(req.body.password, 12);
 
     const result = await prisma.user.create({
       data: {
-        ...req.body,
-      },
-    });
-
-    try {
-      const result = await prisma.user.create({
-        username: req.body.username,
+        name: req.body.name,
         email: req.body.email,
         role: req.body.role,
         password: req.body.password,
-      });
-      res.send(JSON.stringify({ status: 200, error: null, response: result }));
-    } catch (e) {
-      res.send(
-        JSON.stringify({
-          status: 500,
-          error: "In create user " + e,
-          response: null,
-        })
-      );
-    }
-    res.send(JSON.stringify({ status: 200, error: null, response: result }));
+      },
+    });
+    res.status(200).json({ user: result });
   } catch (e) {
-    res.send(JSON.stringify({ status: 500, error: e, response: null }));
+    res.status(500).json({ error: "Create  Failed" });
   }
 }
 
@@ -71,24 +62,33 @@ async function update(req, res) {
     const { id } = req.params;
     const user = await prisma.user.update({
       where: {
-        id: parseInt(id),
+        id: Number(id),
       },
       data: { ...req.body },
     });
-    res.send(JSON.stringify({ status: 200, error: null, response: user }));
+    res.status(200).json({ user });
   } catch (e) {
-    res.send(JSON.stringify({ status: 500, error: e, response: null }));
+    console.log(`e`, e);
+    res.status(500).json({ error: "Update  Failed" });
   }
 }
 
 async function remove(req, res) {
   try {
-    const user = await prisma.deleteUser({
-      id: req.params.id,
+    const { id } = req.params;
+    if (parseInt(req.user.id) === parseInt(id)) {
+      res.status(403).json({ error: "Can not delete your self" });
+      return;
+    }
+    const user = await prisma.user.delete({
+      where: {
+        id: Number(id),
+      },
     });
-    res.send(JSON.stringify({ status: 200, error: null, response: user.id }));
+    res.status(200).json(id);
   } catch (e) {
-    res.send(JSON.stringify({ status: 500, error: e, response: null }));
+    console.log("e :>> ", e);
+    res.status(500).json({ error: "Delete  Failed" });
   }
 }
 

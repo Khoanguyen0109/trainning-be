@@ -5,44 +5,6 @@ const _ = require("lodash");
 
 const prisma = new PrismaClient();
 
-const refreshTokens = [];
-
-async function register(req, res) {
-  try {
-    const user = await prisma.users({
-      where: { email: req.body.email },
-    });
-    if (user.length != 0) {
-      res.send(
-        JSON.stringify({ status: 302, error: "User is found with that email" })
-      );
-      return;
-    }
-    req.body.password = await bcrypt.hash(req.body.password, 12);
-    try {
-      const user = await prisma.createUser({
-        name: req.body.name,
-        email: req.body.email,
-        role: req.body.role,
-        password: req.body.password,
-      });
-      res.send(JSON.stringify({ status: 200, error: null, response: user.id }));
-    } catch (e) {
-      res.send(
-        JSON.stringify({
-          status: 500,
-          error: "In create user " + e,
-          response: null,
-        })
-      );
-    }
-  } catch (e) {
-    res.send(
-      JSON.stringify({ status: 500, error: "In user " + e, response: null })
-    );
-  }
-}
-
 async function login(req, res) {
   try {
     const { email, password } = req.body;
@@ -53,21 +15,15 @@ async function login(req, res) {
     });
     if (!user) {
       res.status(302).json({
-        error: "User is found with that email",
+        error: "User is not found with that email",
       });
       return;
     }
-    // const valid = await bcrypt.compare(req.body.password, user[0].password);
+    const valid = await bcrypt.compare(req.body.password, user.password);
 
-    // if (!valid){
-    //     res.send(JSON.stringify({"status": 404, "error": 'Incorrect password', "token": null}));
-    //     return;
-    //   }
-
-    if (user.password !== password) {
-      res.status(401).json({
-        status: 404,
-        error: "Incorrect password",
+    if (!valid) {
+      res.status(302).json({
+        error: "Password Incorrect",
         token: null,
       });
       return;
@@ -75,6 +31,7 @@ async function login(req, res) {
 
     const token = jwt.sign(
       {
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -90,6 +47,7 @@ async function login(req, res) {
 
       access_token: token,
       user: {
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -119,11 +77,11 @@ function token(req, res) {
         return res.status(403).json("Invalid Token");
       }
       const accessToken = jwt.sign(
-        { name: user.name, email: user.email, role: user.role },
+        { id: user.id, name: user.name, email: user.email, role: user.role },
         process.env.ACCESS_TOKEN_SECRET,
         { expiresIn: "20m" }
       );
-  
+
       res.json({
         status: 200,
         error: null,
@@ -135,14 +93,11 @@ function token(req, res) {
       });
     });
   } catch (error) {
-    res.status(500).send(error);
-
+    res.status(500).send({ error: "Expired" });
   }
-
 }
 
 module.exports = {
-  register,
   login,
   logout,
   token,
